@@ -135,7 +135,7 @@ jobs:
     name: Build & Push Docker Image
     runs-on: ubuntu-latest
     needs: sonarqube
-    if: github.event_name == 'push'
+    if: false
     outputs:
       image-tag: ${{ steps.meta.outputs.tags }}
       image-digest: ${{ steps.build.outputs.digest }}
