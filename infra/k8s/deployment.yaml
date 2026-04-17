@@ -1,0 +1,121 @@
+# ── Namespace ─────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: datapulse
+  labels:
+    app.kubernetes.io/part-of: datapulse
+
+---
+# ── ConfigMap ─────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: datapulse-config
+  namespace: datapulse
+data:
+  COSMOS_DB: datapulse
+  COSMOS_CONTAINER: kpis
+  LOG_LEVEL: info
+
+---
+# ── Secret (use Azure Key Vault in production) ────────────────────────────────
+apiVersion: v1
+kind: Secret
+metadata:
+  name: datapulse-secrets
+  namespace: datapulse
+type: Opaque
+stringData:
+  COSMOS_ENDPOINT: "https://your-cosmos.documents.azure.com:443/"
+  COSMOS_KEY: "your-cosmos-key-here"
+
+---
+# ── Deployment ────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: datapulse-api
+  namespace: datapulse
+  labels:
+    app: datapulse-api
+    version: "1.0.0"
+    app.kubernetes.io/name: datapulse-api
+    app.kubernetes.io/part-of: datapulse
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: datapulse-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0          # Zero-downtime rolling deploy
+  template:
+    metadata:
+      labels:
+        app: datapulse-api
+        version: "1.0.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      # Security: non-root, read-only filesystem
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      containers:
+        - name: datapulse-api
+          image: IMAGE_PLACEHOLDER           # Replaced by CI/CD pipeline
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+
+          # Environment from ConfigMap + Secret
+          envFrom:
+            - configMapRef:
+                name: datapulse-config
+            - secretRef:
+                name: datapulse-secrets
+
+          # Resource requests & limits
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
+          # Liveness probe: restart if unhealthy
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          # Readiness probe: only send traffic when ready
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          # Security context
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]

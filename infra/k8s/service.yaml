@@ -1,0 +1,21 @@
+# ── Service ───────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: datapulse-api
+  namespace: datapulse
+  labels:
+    app: datapulse-api
+    app.kubernetes.io/part-of: datapulse
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+spec:
+  type: LoadBalancer          # Use ClusterIP + Ingress in production
+  selector:
+    app: datapulse-api
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8000

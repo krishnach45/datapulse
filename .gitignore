@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+.env
+
+# Testing & coverage
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+reports/
+
+# Delta Lake / Spark local output
+/tmp/datapulse/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Docker
+*.log
+
+# Secrets — never commit these
+*.pem
+*.key
+.env.local
+secrets/
+
+# macOS
+.DS_Store
