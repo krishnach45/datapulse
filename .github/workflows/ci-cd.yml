@@ -121,8 +121,9 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         with:
           args: >
-            -Dsonar.projectKey=datapulse
+            -Dsonar.projectKey=krishnach45_datapulse
             -Dsonar.projectName=DataPulse
+            -Dsonar.organization=krishnach45
             -Dsonar.sources=.
             -Dsonar.language=py
             -Dsonar.exclusions=**/tests/**,**/__pycache__/**
