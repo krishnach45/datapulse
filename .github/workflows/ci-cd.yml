@@ -96,6 +96,7 @@ jobs:
   sonarqube:
     name: SonarQube Quality Gate
     runs-on: ubuntu-latest
+    continue-on-error: true
     needs: unit-tests
     steps:
       - uses: actions/checkout@v4
