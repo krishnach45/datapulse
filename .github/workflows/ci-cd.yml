@@ -85,6 +85,12 @@ jobs:
           name: coverage-report
           path: htmlcov/
 
+      - name: Upload coverage XML
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: always()
@@ -106,10 +112,10 @@ jobs:
       - name: Download coverage report
         uses: actions/download-artifact@v4
         with:
-          name: coverage-report
+          name: coverag-xml
 
       - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@master
+        uses: SonarSource/sonarqube-scan-action@v3
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
@@ -118,6 +124,7 @@ jobs:
             -Dsonar.projectKey=datapulse
             -Dsonar.projectName=DataPulse
             -Dsonar.sources=.
+            -Dsonar.language=py
             -Dsonar.exclusions=**/tests/**,**/__pycache__/**
             -Dsonar.python.coverage.reportPaths=coverage.xml
             -Dsonar.qualitygate.wait=true
