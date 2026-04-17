@@ -6,11 +6,12 @@ python_functions = ["test_*"]
 addopts = "-v --tb=short"
 
 [tool.ruff]
-[tool.ruff.lint]
 line-length = 100
 target-version = "py311"
-lint.select = ["E", "F", "W", "I"]
-lint.ignore = ["E501"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
 
 [tool.black]
 line-length = 100
