@@ -8,12 +8,12 @@ Usage:
     python event_producer.py --mode burst --count 1000
 """
 
+import argparse
 import json
+import logging
 import random
 import time
 import uuid
-import argparse
-import logging
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -21,24 +21,21 @@ from kafka import KafkaProducer
 from kafka.errors import KafkaError
 
 # ── Logging ─────────────────────────────────────────────────────────────────
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s - %(message)s")
 logger = logging.getLogger("datapulse.producer")
 
 # ── Sample Data Pools ────────────────────────────────────────────────────────
 PRODUCTS = [
-    {"id": "SKU-001", "name": "Wireless Headphones",   "category": "Electronics", "price": 89.99},
-    {"id": "SKU-002", "name": "Running Shoes",          "category": "Sports",      "price": 129.99},
-    {"id": "SKU-003", "name": "Coffee Maker",           "category": "Kitchen",     "price": 59.99},
-    {"id": "SKU-004", "name": "Yoga Mat",               "category": "Sports",      "price": 34.99},
-    {"id": "SKU-005", "name": "Smart Watch",            "category": "Electronics", "price": 249.99},
-    {"id": "SKU-006", "name": "Backpack",               "category": "Accessories", "price": 49.99},
-    {"id": "SKU-007", "name": "Laptop Stand",           "category": "Electronics", "price": 39.99},
-    {"id": "SKU-008", "name": "Water Bottle",           "category": "Sports",      "price": 24.99},
-    {"id": "SKU-009", "name": "Desk Lamp",              "category": "Home",        "price": 44.99},
-    {"id": "SKU-010", "name": "Mechanical Keyboard",    "category": "Electronics", "price": 149.99},
+    {"id": "SKU-001", "name": "Wireless Headphones", "category": "Electronics", "price": 89.99},
+    {"id": "SKU-002", "name": "Running Shoes", "category": "Sports", "price": 129.99},
+    {"id": "SKU-003", "name": "Coffee Maker", "category": "Kitchen", "price": 59.99},
+    {"id": "SKU-004", "name": "Yoga Mat", "category": "Sports", "price": 34.99},
+    {"id": "SKU-005", "name": "Smart Watch", "category": "Electronics", "price": 249.99},
+    {"id": "SKU-006", "name": "Backpack", "category": "Accessories", "price": 49.99},
+    {"id": "SKU-007", "name": "Laptop Stand", "category": "Electronics", "price": 39.99},
+    {"id": "SKU-008", "name": "Water Bottle", "category": "Sports", "price": 24.99},
+    {"id": "SKU-009", "name": "Desk Lamp", "category": "Home", "price": 44.99},
+    {"id": "SKU-010", "name": "Mechanical Keyboard", "category": "Electronics", "price": 149.99},
 ]
 
 REGIONS = ["North America", "Europe", "Asia Pacific", "Latin America", "Middle East"]
@@ -117,14 +114,14 @@ def generate_inventory_event() -> dict:
 
 
 EVENT_GENERATORS = {
-    "orders":    (generate_order_event,     0.40),  # 40% orders
-    "clicks":    (generate_click_event,     0.50),  # 50% clicks
+    "orders": (generate_order_event, 0.40),  # 40% orders
+    "clicks": (generate_click_event, 0.50),  # 50% clicks
     "inventory": (generate_inventory_event, 0.10),  # 10% inventory
 }
 
 TOPIC_MAP = {
-    "orders":    "datapulse-orders",
-    "clicks":    "datapulse-clicks",
+    "orders": "datapulse-orders",
+    "clicks": "datapulse-clicks",
     "inventory": "datapulse-inventory",
 }
 
@@ -207,7 +204,9 @@ class EventProducer:
 
     def seed_sample_data(self, n_orders: int = 500, n_clicks: int = 1000, n_inventory: int = 100):
         """Seed a fixed set of sample data for development/demo."""
-        logger.info(f"Seeding sample data: {n_orders} orders, {n_clicks} clicks, {n_inventory} inventory updates")
+        logger.info(
+            f"Seeding sample data: {n_orders} orders, {n_clicks} clicks, {n_inventory} inventory updates"
+        )
         for _ in range(n_orders):
             self.send_event("orders")
         for _ in range(n_clicks):

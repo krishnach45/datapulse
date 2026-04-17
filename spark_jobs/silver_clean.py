@@ -13,17 +13,23 @@ Run locally:
     spark-submit --packages io.delta:delta-spark_2.12:3.1.0 silver_clean.py
 """
 
-import os
 import logging
-from pyspark.sql import SparkSession, DataFrame
+import os
+
+from delta import configure_spark_with_delta_pip
+from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import functions as F
+from pyspark.sql.functions import abs as spark_abs
 from pyspark.sql.functions import (
-    col, trim, upper, lower, when, lit, to_timestamp,
-    current_timestamp, regexp_replace, abs as spark_abs
+    col,
+    current_timestamp,
+    lit,
+    lower,
+    to_timestamp,
+    trim,
+    upper,
 )
 from pyspark.sql.window import Window
-from pyspark.sql import functions as F
-from delta import configure_spark_with_delta_pip
-from delta.tables import DeltaTable
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("datapulse.silver")
@@ -35,10 +41,11 @@ CHECKPOINT_BASE = os.getenv("CHECKPOINT_BASE", "/tmp/datapulse/checkpoints")
 
 def create_spark_session() -> SparkSession:
     builder = (
-        SparkSession.builder
-        .appName("DataPulse-Silver-Cleaning")
+        SparkSession.builder.appName("DataPulse-Silver-Cleaning")
         .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
-        .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+        .config(
+            "spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog"
+        )
         .config("spark.databricks.delta.schema.autoMerge.enabled", "true")
     )
     return configure_spark_with_delta_pip(builder).getOrCreate()
@@ -52,28 +59,28 @@ def clean_orders(df: DataFrame) -> tuple[DataFrame, DataFrame]:
     """
     # Identify bad records
     bad = df.filter(
-        col("event_id").isNull() |
-        col("order_id").isNull() |
-        col("customer_id").isNull() |
-        (col("total_amount") <= 0) |
-        col("status").isNull()
+        col("event_id").isNull()
+        | col("order_id").isNull()
+        | col("customer_id").isNull()
+        | (col("total_amount") <= 0)
+        | col("status").isNull()
     ).withColumn("quarantine_reason", lit("missing_required_fields_or_invalid_amount"))
 
     # Clean records
     clean = (
         df.filter(
-            col("event_id").isNotNull() &
-            col("order_id").isNotNull() &
-            col("customer_id").isNotNull() &
-            (col("total_amount") > 0) &
-            col("status").isNotNull()
+            col("event_id").isNotNull()
+            & col("order_id").isNotNull()
+            & col("customer_id").isNotNull()
+            & (col("total_amount") > 0)
+            & col("status").isNotNull()
         )
         # Standardise text fields
-        .withColumn("customer_id",    upper(trim(col("customer_id"))))
-        .withColumn("region",         trim(col("region")))
-        .withColumn("status",         lower(trim(col("status"))))
+        .withColumn("customer_id", upper(trim(col("customer_id"))))
+        .withColumn("region", trim(col("region")))
+        .withColumn("status", lower(trim(col("status"))))
         .withColumn("payment_method", lower(trim(col("payment_method"))))
-        .withColumn("currency",       upper(trim(col("currency"))))
+        .withColumn("currency", upper(trim(col("currency"))))
         # Parse timestamp
         .withColumn("event_ts", to_timestamp(col("timestamp")))
         # Enrich: flag high-value orders
@@ -87,8 +94,7 @@ def clean_orders(df: DataFrame) -> tuple[DataFrame, DataFrame]:
     # Dedup by event_id (keep latest kafka_offset)
     window = Window.partitionBy("event_id").orderBy(col("kafka_offset").desc())
     clean = (
-        clean
-        .withColumn("_row_num", F.row_number().over(window))
+        clean.withColumn("_row_num", F.row_number().over(window))
         .filter(col("_row_num") == 1)
         .drop("_row_num")
     )
@@ -99,30 +105,27 @@ def clean_orders(df: DataFrame) -> tuple[DataFrame, DataFrame]:
 # ── Click cleaning ────────────────────────────────────────────────────────────
 def clean_clicks(df: DataFrame) -> tuple[DataFrame, DataFrame]:
     bad = df.filter(
-        col("event_id").isNull() |
-        col("session_id").isNull() |
-        col("product_id").isNull()
+        col("event_id").isNull() | col("session_id").isNull() | col("product_id").isNull()
     ).withColumn("quarantine_reason", lit("missing_required_click_fields"))
 
     clean = (
         df.filter(
-            col("event_id").isNotNull() &
-            col("session_id").isNotNull() &
-            col("product_id").isNotNull()
+            col("event_id").isNotNull()
+            & col("session_id").isNotNull()
+            & col("product_id").isNotNull()
         )
-        .withColumn("customer_id",      upper(trim(col("customer_id"))))
-        .withColumn("region",           trim(col("region")))
-        .withColumn("category",         trim(col("category")))
-        .withColumn("page",             lower(trim(col("page"))))
-        .withColumn("event_ts",         to_timestamp(col("timestamp")))
+        .withColumn("customer_id", upper(trim(col("customer_id"))))
+        .withColumn("region", trim(col("region")))
+        .withColumn("category", trim(col("category")))
+        .withColumn("page", lower(trim(col("page"))))
+        .withColumn("event_ts", to_timestamp(col("timestamp")))
         .withColumn("time_on_page_sec", spark_abs(col("time_on_page_sec")))
         .withColumn("silver_processed_at", current_timestamp())
     )
 
     window = Window.partitionBy("event_id").orderBy(col("kafka_offset").desc())
     clean = (
-        clean
-        .withColumn("_row_num", F.row_number().over(window))
+        clean.withColumn("_row_num", F.row_number().over(window))
         .filter(col("_row_num") == 1)
         .drop("_row_num")
     )
@@ -133,28 +136,23 @@ def clean_clicks(df: DataFrame) -> tuple[DataFrame, DataFrame]:
 # ── Inventory cleaning ────────────────────────────────────────────────────────
 def clean_inventory(df: DataFrame) -> tuple[DataFrame, DataFrame]:
     bad = df.filter(
-        col("event_id").isNull() |
-        col("product_id").isNull() |
-        (col("stock_level") < 0)
+        col("event_id").isNull() | col("product_id").isNull() | (col("stock_level") < 0)
     ).withColumn("quarantine_reason", lit("invalid_inventory_event"))
 
     clean = (
         df.filter(
-            col("event_id").isNotNull() &
-            col("product_id").isNotNull() &
-            (col("stock_level") >= 0)
+            col("event_id").isNotNull() & col("product_id").isNotNull() & (col("stock_level") >= 0)
         )
-        .withColumn("product_id",          upper(trim(col("product_id"))))
-        .withColumn("warehouse_id",        upper(trim(col("warehouse_id"))))
-        .withColumn("action",              lower(trim(col("action"))))
-        .withColumn("event_ts",            to_timestamp(col("timestamp")))
+        .withColumn("product_id", upper(trim(col("product_id"))))
+        .withColumn("warehouse_id", upper(trim(col("warehouse_id"))))
+        .withColumn("action", lower(trim(col("action"))))
+        .withColumn("event_ts", to_timestamp(col("timestamp")))
         .withColumn("silver_processed_at", current_timestamp())
     )
 
     window = Window.partitionBy("event_id").orderBy(col("kafka_offset").desc())
     clean = (
-        clean
-        .withColumn("_row_num", F.row_number().over(window))
+        clean.withColumn("_row_num", F.row_number().over(window))
         .filter(col("_row_num") == 1)
         .drop("_row_num")
     )
@@ -163,18 +161,17 @@ def clean_inventory(df: DataFrame) -> tuple[DataFrame, DataFrame]:
 
 
 CLEANER_MAP = {
-    "orders":    clean_orders,
-    "clicks":    clean_clicks,
+    "orders": clean_orders,
+    "clicks": clean_clicks,
     "inventory": clean_inventory,
 }
 
 
 def process_silver(spark: SparkSession, event_type: str):
     """Read bronze, clean, write silver + quarantine."""
-    bronze_path     = f"{DELTA_BASE_PATH}/bronze/{event_type}"
-    silver_path     = f"{DELTA_BASE_PATH}/silver/{event_type}"
+    bronze_path = f"{DELTA_BASE_PATH}/bronze/{event_type}"
+    silver_path = f"{DELTA_BASE_PATH}/silver/{event_type}"
     quarantine_path = f"{DELTA_BASE_PATH}/silver/_quarantine/{event_type}"
-    checkpoint      = f"{CHECKPOINT_BASE}/silver/{event_type}"
 
     bronze_df = spark.read.format("delta").load(bronze_path)
 
@@ -183,8 +180,7 @@ def process_silver(spark: SparkSession, event_type: str):
 
     # Write silver
     (
-        clean_df.write
-        .format("delta")
+        clean_df.write.format("delta")
         .mode("overwrite")
         .option("mergeSchema", "true")
         .partitionBy("status" if event_type == "orders" else "source_topic")
@@ -195,12 +191,7 @@ def process_silver(spark: SparkSession, event_type: str):
     # Write quarantine
     bad_count = quarantine_df.count()
     if bad_count > 0:
-        (
-            quarantine_df.write
-            .format("delta")
-            .mode("append")
-            .save(quarantine_path)
-        )
+        (quarantine_df.write.format("delta").mode("append").save(quarantine_path))
         logger.warning(f"Quarantined {bad_count} bad {event_type} records → {quarantine_path}")
 
 

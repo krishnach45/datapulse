@@ -11,87 +11,102 @@ Run locally:
     io.delta:delta-spark_2.12:3.1.0 bronze_ingest.py
 """
 
-import os
 import logging
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import (
-    col, from_json, current_timestamp, lit, to_timestamp
-)
-from pyspark.sql.types import (
-    StructType, StructField, StringType, DoubleType,
-    IntegerType, BooleanType, TimestampType
-)
+import os
+
 from delta import configure_spark_with_delta_pip
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, current_timestamp, from_json, lit
+from pyspark.sql.types import (
+    BooleanType,
+    DoubleType,
+    IntegerType,
+    StringType,
+    StructField,
+    StructType,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("datapulse.bronze")
 
 # ── Config ───────────────────────────────────────────────────────────────────
-KAFKA_BROKER     = os.getenv("KAFKA_BROKER",  "kafka:29092")
-DELTA_BASE_PATH  = os.getenv("DELTA_BASE_PATH", "/tmp/datapulse/delta")
-CHECKPOINT_BASE  = os.getenv("CHECKPOINT_BASE", "/tmp/datapulse/checkpoints")
+KAFKA_BROKER = os.getenv("KAFKA_BROKER", "kafka:29092")
+DELTA_BASE_PATH = os.getenv("DELTA_BASE_PATH", "/tmp/datapulse/delta")
+CHECKPOINT_BASE = os.getenv("CHECKPOINT_BASE", "/tmp/datapulse/checkpoints")
 
 TOPICS = {
-    "orders":    "datapulse-orders",
-    "clicks":    "datapulse-clicks",
+    "orders": "datapulse-orders",
+    "clicks": "datapulse-clicks",
     "inventory": "datapulse-inventory",
 }
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
-ORDER_SCHEMA = StructType([
-    StructField("event_type",       StringType(),  True),
-    StructField("event_id",         StringType(),  True),
-    StructField("timestamp",        StringType(),  True),
-    StructField("order_id",         StringType(),  True),
-    StructField("customer_id",      StringType(),  True),
-    StructField("region",           StringType(),  True),
-    StructField("product",          StructType([
-        StructField("id",           StringType(),  True),
-        StructField("name",         StringType(),  True),
-        StructField("category",     StringType(),  True),
-        StructField("unit_price",   DoubleType(),  True),
-    ]), True),
-    StructField("quantity",         IntegerType(), True),
-    StructField("subtotal",         DoubleType(),  True),
-    StructField("discount_pct",     DoubleType(),  True),
-    StructField("discount_amount",  DoubleType(),  True),
-    StructField("total_amount",     DoubleType(),  True),
-    StructField("currency",         StringType(),  True),
-    StructField("payment_method",   StringType(),  True),
-    StructField("status",           StringType(),  True),
-])
+ORDER_SCHEMA = StructType(
+    [
+        StructField("event_type", StringType(), True),
+        StructField("event_id", StringType(), True),
+        StructField("timestamp", StringType(), True),
+        StructField("order_id", StringType(), True),
+        StructField("customer_id", StringType(), True),
+        StructField("region", StringType(), True),
+        StructField(
+            "product",
+            StructType(
+                [
+                    StructField("id", StringType(), True),
+                    StructField("name", StringType(), True),
+                    StructField("category", StringType(), True),
+                    StructField("unit_price", DoubleType(), True),
+                ]
+            ),
+            True,
+        ),
+        StructField("quantity", IntegerType(), True),
+        StructField("subtotal", DoubleType(), True),
+        StructField("discount_pct", DoubleType(), True),
+        StructField("discount_amount", DoubleType(), True),
+        StructField("total_amount", DoubleType(), True),
+        StructField("currency", StringType(), True),
+        StructField("payment_method", StringType(), True),
+        StructField("status", StringType(), True),
+    ]
+)
 
-CLICK_SCHEMA = StructType([
-    StructField("event_type",       StringType(),  True),
-    StructField("event_id",         StringType(),  True),
-    StructField("timestamp",        StringType(),  True),
-    StructField("session_id",       StringType(),  True),
-    StructField("customer_id",      StringType(),  True),
-    StructField("region",           StringType(),  True),
-    StructField("product_id",       StringType(),  True),
-    StructField("product_name",     StringType(),  True),
-    StructField("category",         StringType(),  True),
-    StructField("page",             StringType(),  True),
-    StructField("added_to_cart",    BooleanType(), True),
-    StructField("time_on_page_sec", IntegerType(), True),
-])
+CLICK_SCHEMA = StructType(
+    [
+        StructField("event_type", StringType(), True),
+        StructField("event_id", StringType(), True),
+        StructField("timestamp", StringType(), True),
+        StructField("session_id", StringType(), True),
+        StructField("customer_id", StringType(), True),
+        StructField("region", StringType(), True),
+        StructField("product_id", StringType(), True),
+        StructField("product_name", StringType(), True),
+        StructField("category", StringType(), True),
+        StructField("page", StringType(), True),
+        StructField("added_to_cart", BooleanType(), True),
+        StructField("time_on_page_sec", IntegerType(), True),
+    ]
+)
 
-INVENTORY_SCHEMA = StructType([
-    StructField("event_type",        StringType(),  True),
-    StructField("event_id",          StringType(),  True),
-    StructField("timestamp",         StringType(),  True),
-    StructField("product_id",        StringType(),  True),
-    StructField("product_name",      StringType(),  True),
-    StructField("warehouse_id",      StringType(),  True),
-    StructField("stock_level",       IntegerType(), True),
-    StructField("reorder_threshold", IntegerType(), True),
-    StructField("low_stock_alert",   BooleanType(), True),
-    StructField("action",            StringType(),  True),
-])
+INVENTORY_SCHEMA = StructType(
+    [
+        StructField("event_type", StringType(), True),
+        StructField("event_id", StringType(), True),
+        StructField("timestamp", StringType(), True),
+        StructField("product_id", StringType(), True),
+        StructField("product_name", StringType(), True),
+        StructField("warehouse_id", StringType(), True),
+        StructField("stock_level", IntegerType(), True),
+        StructField("reorder_threshold", IntegerType(), True),
+        StructField("low_stock_alert", BooleanType(), True),
+        StructField("action", StringType(), True),
+    ]
+)
 
 SCHEMA_MAP = {
-    "orders":    ORDER_SCHEMA,
-    "clicks":    CLICK_SCHEMA,
+    "orders": ORDER_SCHEMA,
+    "clicks": CLICK_SCHEMA,
     "inventory": INVENTORY_SCHEMA,
 }
 
@@ -99,10 +114,11 @@ SCHEMA_MAP = {
 def create_spark_session() -> SparkSession:
     """Create a Spark session with Delta Lake and Kafka support."""
     builder = (
-        SparkSession.builder
-        .appName("DataPulse-Bronze-Ingestion")
+        SparkSession.builder.appName("DataPulse-Bronze-Ingestion")
         .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
-        .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+        .config(
+            "spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog"
+        )
         .config("spark.sql.streaming.schemaInference", "true")
         .config("spark.databricks.delta.schema.autoMerge.enabled", "true")
     )
@@ -112,8 +128,7 @@ def create_spark_session() -> SparkSession:
 def read_kafka_stream(spark: SparkSession, topic: str):
     """Read a Kafka topic as a streaming DataFrame."""
     return (
-        spark.readStream
-        .format("kafka")
+        spark.readStream.format("kafka")
         .option("kafka.bootstrap.servers", KAFKA_BROKER)
         .option("subscribe", topic)
         .option("startingOffsets", "earliest")
@@ -129,30 +144,25 @@ def parse_and_write_bronze(spark: SparkSession, event_type: str, schema, topic: 
     """
     raw_stream = read_kafka_stream(spark, topic)
 
-    parsed = (
-        raw_stream
-        .select(
-            from_json(col("value").cast("string"), schema).alias("data"),
-            col("offset").alias("kafka_offset"),
-            col("partition").alias("kafka_partition"),
-            col("timestamp").alias("kafka_timestamp"),
-        )
-        .select(
-            "data.*",
-            "kafka_offset",
-            "kafka_partition",
-            "kafka_timestamp",
-            current_timestamp().alias("ingested_at"),
-            lit(event_type).alias("source_topic"),
-        )
+    parsed = raw_stream.select(
+        from_json(col("value").cast("string"), schema).alias("data"),
+        col("offset").alias("kafka_offset"),
+        col("partition").alias("kafka_partition"),
+        col("timestamp").alias("kafka_timestamp"),
+    ).select(
+        "data.*",
+        "kafka_offset",
+        "kafka_partition",
+        "kafka_timestamp",
+        current_timestamp().alias("ingested_at"),
+        lit(event_type).alias("source_topic"),
     )
 
-    bronze_path  = f"{DELTA_BASE_PATH}/bronze/{event_type}"
-    checkpoint   = f"{CHECKPOINT_BASE}/bronze/{event_type}"
+    bronze_path = f"{DELTA_BASE_PATH}/bronze/{event_type}"
+    checkpoint = f"{CHECKPOINT_BASE}/bronze/{event_type}"
 
     query = (
-        parsed.writeStream
-        .format("delta")
+        parsed.writeStream.format("delta")
         .outputMode("append")
         .option("checkpointLocation", checkpoint)
         .option("mergeSchema", "true")

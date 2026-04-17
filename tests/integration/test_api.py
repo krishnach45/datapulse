@@ -10,8 +10,9 @@ Run against staging (set API_BASE_URL env var):
 """
 
 import os
-import pytest
+
 import httpx
+import pytest
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 
