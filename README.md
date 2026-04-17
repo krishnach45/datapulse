@@ -300,16 +300,6 @@ The API is fully functional on day one without Cosmos DB populated, making local
 
 ---
 
-## Interview Demo Script
-
-1. **GitHub repo** — show structure, README, commit history
-2. **Actions tab** — green CI/CD pipeline running on every push
-3. **Terminal** — `pytest tests/unit/ -v` — 21 green in 0.16s
-4. **Terminal** — `pytest tests/integration/ -v` — 27 green in 2.77s
-5. **Browser** — `http://localhost:8000/docs` — demo each KPI endpoint live
-6. **Code walkthrough** — `bronze_ingest.py` → `silver_clean.py` → `gold_aggregate.py`
-7. **K8s manifests** — `deployment.yaml` (rolling update) + `hpa.yaml` (auto-scaling)
-8. **Grafana** — latency histogram + request rate panels
 
 ---
 
