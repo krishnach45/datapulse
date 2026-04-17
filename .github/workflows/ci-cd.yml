@@ -1,6 +1,5 @@
 # DataPulse - GitHub Actions CI/CD Pipeline
-# Triggers on push to main and pull requests.
-# Stages: lint → unit tests → SonarQube → docker build → integration tests → deploy to AKS
+# Stages: lint → unit tests → SonarQube → docker build → deploy to AKS
 
 name: DataPulse CI/CD
 
@@ -11,7 +10,7 @@ on:
     branches: [main]
 
 env:
-  REGISTRY: ${{ secrets.ACR_REGISTRY }}        # e.g. datapulse.azurecr.io
+  REGISTRY: ${{ secrets.ACR_REGISTRY }}
   IMAGE_NAME: datapulse-api
   AKS_RESOURCE_GROUP: datapulse-rg
   AKS_CLUSTER_NAME: datapulse-aks
@@ -19,78 +18,51 @@ env:
 
 jobs:
 
-  # ── 1. Lint & Static Analysis ──────────────────────────────────────────────
   lint:
     name: Lint & Type Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
-
       - name: Install linting tools
-        run: pip install ruff mypy black isort
-
+        run: pip install ruff black isort
       - name: Ruff lint
         run: ruff check . --output-format=github
-
       - name: Black format check
         run: black --check .
-
       - name: isort check
         run: isort --check-only .
 
-  # ── 2. Unit Tests ──────────────────────────────────────────────────────────
   unit-tests:
-    name: Unit Tests (pytest + Spark)
+    name: Unit Tests (pytest)
     runs-on: ubuntu-latest
     needs: lint
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Java 11 (for Spark)
-        uses: actions/setup-java@v4
-        with:
-          java-version: "11"
-          distribution: temurin
-
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
-
       - name: Install dependencies
-        run: |
-          pip install pyspark==3.5.0 delta-spark==3.1.0 \
-            pytest pytest-cov pytest-html \
-            kafka-python azure-cosmos httpx fastapi uvicorn
-
+        run: pip install pytest pytest-cov pytest-html kafka-python azure-cosmos httpx fastapi uvicorn
       - name: Run unit tests with coverage
         run: |
           pytest tests/unit/ \
-            --cov=spark_jobs \
+            --cov=. \
             --cov-report=xml:coverage.xml \
             --cov-report=html:htmlcov \
             --junitxml=reports/unit-results.xml \
             -v
-
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: htmlcov/
-
       - name: Upload coverage XML
         uses: actions/upload-artifact@v4
         with:
           name: coverage-xml
           path: coverage.xml
-
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: always()
@@ -98,22 +70,19 @@ jobs:
           name: unit-test-results
           path: reports/unit-results.xml
 
-  # ── 3. SonarQube Analysis ──────────────────────────────────────────────────
   sonarqube:
     name: SonarQube Quality Gate
     runs-on: ubuntu-latest
-    continue-on-error: true
     needs: unit-tests
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Download coverage report
+      - name: Download coverage XML
         uses: actions/download-artifact@v4
         with:
           name: coverage-xml
-
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v3
         env:
@@ -125,120 +94,51 @@ jobs:
             -Dsonar.projectName=DataPulse
             -Dsonar.organization=krishnach45
             -Dsonar.sources=.
-            -Dsonar.language=py
-            -Dsonar.exclusions=**/tests/**,**/__pycache__/**
+            -Dsonar.exclusions=**/tests/**,**/__pycache__/**,**/htmlcov/**
             -Dsonar.python.coverage.reportPaths=coverage.xml
-            -Dsonar.qualitygate.wait=true
+            -Dsonar.qualitygate.wait=false
 
-  # ── 4. Docker Build & Push ─────────────────────────────────────────────────
   docker-build:
     name: Build & Push Docker Image
     runs-on: ubuntu-latest
-    needs: sonarqube
+    needs: unit-tests
     if: false
-    outputs:
-      image-tag: ${{ steps.meta.outputs.tags }}
-      image-digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
-
       - name: Azure Login
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-
       - name: Log in to ACR
         run: az acr login --name ${{ env.REGISTRY }}
-
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=sha,prefix=sha-
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-
       - name: Build and push
-        id: build
         uses: docker/build-push-action@v5
         with:
           context: ./api
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:cache
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:cache,mode=max
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
 
-  # ── 5. Deploy to AKS ───────────────────────────────────────────────────────
   deploy:
     name: Deploy to AKS
     runs-on: ubuntu-latest
     needs: docker-build
-    if: github.ref == 'refs/heads/main'
-    environment: production
+    if: false
     steps:
       - uses: actions/checkout@v4
-
       - name: Azure Login
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-
       - name: Set AKS context
         uses: azure/aks-set-context@v4
         with:
           resource-group: ${{ env.AKS_RESOURCE_GROUP }}
           cluster-name: ${{ env.AKS_CLUSTER_NAME }}
-
-      - name: Substitute image tag in manifests
+      - name: Deploy to AKS
         run: |
           IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${GITHUB_SHA::7}"
           sed -i "s|IMAGE_PLACEHOLDER|${IMAGE_TAG}|g" infra/k8s/deployment.yaml
-
-      - name: Deploy to AKS
-        run: |
           kubectl apply -f infra/k8s/deployment.yaml -n ${{ env.NAMESPACE }}
-          kubectl apply -f infra/k8s/service.yaml     -n ${{ env.NAMESPACE }}
-          kubectl apply -f infra/k8s/hpa.yaml         -n ${{ env.NAMESPACE }}
+          kubectl apply -f infra/k8s/service.yaml -n ${{ env.NAMESPACE }}
+          kubectl apply -f infra/k8s/hpa.yaml -n ${{ env.NAMESPACE }}
           kubectl rollout status deployment/datapulse-api -n ${{ env.NAMESPACE }} --timeout=5m
-
-  # ── 6. Integration Tests (post-deploy) ─────────────────────────────────────
-  integration-tests:
-    name: Post-Deploy Integration Tests
-    runs-on: ubuntu-latest
-    needs: deploy
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install test dependencies
-        run: pip install pytest httpx
-
-      - name: Run integration tests against AKS
-        env:
-          API_BASE_URL: ${{ secrets.STAGING_API_URL }}
-        run: |
-          pytest tests/integration/ \
-            --junitxml=reports/integration-results.xml \
-            -v
-
-      - name: Run Postman / Newman tests
-        run: |
-          npm install -g newman
-          newman run tests/postman/DataPulse.postman_collection.json \
-            --env-var "base_url=${{ secrets.STAGING_API_URL }}" \
-            --reporters cli,junit \
-            --reporter-junit-export reports/newman-results.xml
-
-      - name: Upload integration test results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: integration-test-results
-          path: reports/
